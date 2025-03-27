@@ -1,0 +1,40 @@
+{
+	"schemaVersion": 1,
+	"id": "claudemod",
+	"version": "${version}",
+	"name": "Claude Minecraft Mod",
+	"description": "Use Claude AI to build structures in Minecraft using natural language",
+	"authors": [
+		"Brett Baron"
+	],
+	"contact": {
+		"homepage": "https://claude.ai"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/claudemod/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.brettbaron.claudemod.ClaudeMod"
+		],
+		"client": [
+			"com.brettbaron.claudemod.client.ClaudeModClient"
+		]
+	},
+	"mixins": [
+		"claudemod.mixins.json",
+		{
+			"config": "claudemod.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.15.10",
+		"minecraft": "~1.20.6",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
