@@ -3,6 +3,7 @@ package com.brettbaron.claudemod;
 import com.brettbaron.claudemod.command.ApiKeyCommand;
 import com.brettbaron.claudemod.command.ClaudeCommand;
 import com.brettbaron.claudemod.config.ClaudeConfig;
+import com.brettbaron.claudemod.mcs.McsProcessor;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 
@@ -54,6 +55,15 @@ public class ClaudeMod implements ModInitializer {
 		
 		// Load configuration
 		ClaudeConfig.load();
+		
+		// Initialize MCS processor
+		try {
+			McsProcessor.initialize();
+			log("MCS Processor initialized");
+		} catch (Exception e) {
+			LOGGER.error("Failed to initialize MCS processor", e);
+			System.err.println("Failed to initialize MCS processor: " + e.getMessage());
+		}
 		
 		// Register commands
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {

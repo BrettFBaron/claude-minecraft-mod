@@ -102,162 +102,26 @@ public class ClaudeCommand {
      * Process the complete building process, handling multiple API calls if needed
      */
     private static int processFullBuild(String apiResponse, ServerCommandSource source) {
-        ClaudeMod.log("Processing full build response");
-        int totalBlocksPlaced = 0;
-        int apiCallsMade = 1;  // We've already made one call at this point
+        ClaudeMod.log("Processing MCS build response");
         
         try {
-            // Process initial response
-            int blocksPlaced = BlockPlacement.processResponse(apiResponse, source);
-            totalBlocksPlaced += blocksPlaced;
-            
-            // Let the player know progress
-            if (blocksPlaced > 0) {
-                final int initialBlocks = blocksPlaced;
-                final int initialPhase = apiCallsMade;
-                source.sendFeedback(() -> 
-                    Text.literal("Progress: Placed " + initialBlocks + " blocks in phase " + initialPhase), false);
-            }
-            
-            // Check if there are more parts to build in the response
-            JsonObject responseJson = gson.fromJson(apiResponse, JsonObject.class);
-            boolean hasMoreContent = hasMoreBuildingContent(responseJson);
-            
-            // Continue processing more API calls if needed
-            while (hasMoreContent && apiCallsMade < MAX_API_CALLS) {
-                ClaudeMod.log("Detected more building content, making additional API call");
-                final int nextPhase = apiCallsMade + 1;
-                source.sendFeedback(() -> Text.literal("Building continues... (Phase " + nextPhase + ")"), false);
-                
-                // Extract continuation message or create one
-                String continuationPrompt = getContinuationPrompt(responseJson);
-                ClaudeMod.log("Using continuation prompt: " + continuationPrompt);
-                
-                // Make another API call
-                apiCallsMade++;
-                String nextResponse = ClaudeAPI.sendRequest(continuationPrompt);
-                
-                // Process this response
-                blocksPlaced = BlockPlacement.processResponse(nextResponse, source);
-                totalBlocksPlaced += blocksPlaced;
-                
-                // Let the player know progress
-                if (blocksPlaced > 0) {
-                    final int phaseBlocks = blocksPlaced;
-                    final int phase = apiCallsMade;
-                    source.sendFeedback(() -> 
-                        Text.literal("Progress: Placed " + phaseBlocks + " blocks in phase " + phase), false);
-                }
-                
-                // Check if there are still more parts
-                responseJson = gson.fromJson(nextResponse, JsonObject.class);
-                hasMoreContent = hasMoreBuildingContent(responseJson);
-            }
-            
-            // If we reached the maximum number of API calls, let the user know
-            if (apiCallsMade >= MAX_API_CALLS && hasMoreBuildingContent(responseJson)) {
-                source.sendFeedback(() -> 
-                    Text.literal("Warning: Building reached maximum number of phases (" + MAX_API_CALLS + ")"), false);
-            }
+            // Process the response to extract and execute MCS commands
+            int commandsProcessed = BlockPlacement.processResponse(apiResponse, source);
             
             // Final summary
-            final int finalTotal = totalBlocksPlaced;
-            final int finalPhases = apiCallsMade;
+            final int totalCommands = commandsProcessed;
             source.sendFeedback(() -> 
-                Text.literal("Built structure with " + finalTotal + " total blocks across " + 
-                             finalPhases + " building phases!"), false);
+                Text.literal("Built structure with " + totalCommands + " commands!"), false);
             
-            return totalBlocksPlaced;
+            return commandsProcessed;
             
         } catch (Exception e) {
             ClaudeMod.log("Error in processFullBuild: " + e.getMessage());
             e.printStackTrace();
             source.sendFeedback(() -> Text.literal("Error processing full build: " + e.getMessage()), false);
-            return totalBlocksPlaced;
+            return 0;
         }
     }
     
-    /**
-     * Check if the response indicates there are more blocks to place
-     */
-    private static boolean hasMoreBuildingContent(JsonObject responseJson) {
-        try {
-            // If the response has a text content with certain keywords indicating more to build
-            if (responseJson.has("content") && responseJson.get("content").isJsonArray()) {
-                JsonArray contentArray = responseJson.getAsJsonArray("content");
-                
-                for (JsonElement element : contentArray) {
-                    if (element.isJsonObject()) {
-                        JsonObject contentObj = element.getAsJsonObject();
-                        
-                        if (contentObj.has("type") && contentObj.get("type").getAsString().equals("text")) {
-                            if (contentObj.has("text")) {
-                                String text = contentObj.get("text").getAsString().toLowerCase();
-                                
-                                // Look for phrases indicating more building to come
-                                if (text.contains("next section") || 
-                                    text.contains("continue building") || 
-                                    text.contains("next part") ||
-                                    text.contains("moving on to") ||
-                                    text.contains("now let's build") ||
-                                    text.contains("let's add") ||
-                                    text.contains("next, we'll")) {
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            return false;
-        } catch (Exception e) {
-            ClaudeMod.log("Error checking for more building content: " + e.getMessage());
-            return false;
-        }
-    }
-    
-    /**
-     * Create a prompt for continuing the building process
-     */
-    private static String getContinuationPrompt(JsonObject responseJson) {
-        try {
-            StringBuilder prompt = new StringBuilder("Please continue building the structure. ");
-            prompt.append("Send the next set of blocks to place using the place_blocks tool. ");
-            
-            // Extract the last message to provide context
-            if (responseJson.has("content") && responseJson.get("content").isJsonArray()) {
-                JsonArray contentArray = responseJson.getAsJsonArray("content");
-                
-                for (int i = contentArray.size() - 1; i >= 0; i--) {
-                    JsonElement element = contentArray.get(i);
-                    if (element.isJsonObject()) {
-                        JsonObject contentObj = element.getAsJsonObject();
-                        
-                        if (contentObj.has("type") && contentObj.get("type").getAsString().equals("text")) {
-                            if (contentObj.has("text")) {
-                                String text = contentObj.get("text").getAsString();
-                                // Extract last 200 characters for context
-                                if (text.length() > 200) {
-                                    prompt.append("Continuing from: \"...");
-                                    prompt.append(text.substring(text.length() - 200));
-                                    prompt.append("\"");
-                                } else {
-                                    prompt.append("Continuing from: \"");
-                                    prompt.append(text);
-                                    prompt.append("\"");
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            return prompt.toString();
-        } catch (Exception e) {
-            ClaudeMod.log("Error creating continuation prompt: " + e.getMessage());
-            return "Please continue building the structure. Send the next set of blocks to place.";
-        }
-    }
+    // No longer needed for MCS approach - multi-turn building is now handled client-side
 }

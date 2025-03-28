@@ -1,183 +1,181 @@
 package com.brettbaron.claudemod.api;
 
 import com.brettbaron.claudemod.ClaudeMod;
+import com.brettbaron.claudemod.mcs.McsProcessor;
 import com.google.gson.*;
-import net.minecraft.block.Block;
-import net.minecraft.registry.Registries;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
+/**
+ * Handles the processing of Claude's MCS (Minecraft Command Syntax) responses
+ */
 public class BlockPlacement {
     private static final Gson gson = new Gson();
     
+    /**
+     * Process a response from Claude API and extract MCS commands
+     * 
+     * @param apiResponse Raw JSON response from Claude API
+     * @param source The command source for getting the world context
+     * @return Number of commands prepared for execution
+     */
     public static int processResponse(String apiResponse, ServerCommandSource source) {
         try {
-            // Parse the API response
-            ClaudeMod.log("Parsing API response");
-            ClaudeMod.log("API Response excerpt: " + apiResponse.substring(0, Math.min(apiResponse.length(), 200)) + "...");
-            
+            ClaudeMod.log("Processing Claude API response for MCS commands");
             JsonObject responseJson = gson.fromJson(apiResponse, JsonObject.class);
             
-            // More robust content checking
+            // Check if there was an error in the response
+            if (responseJson.has("error")) {
+                String errorMessage = responseJson.getAsJsonObject("error").get("message").getAsString();
+                ClaudeMod.log("API error: " + errorMessage);
+                source.sendFeedback(() -> Text.literal("Error from Claude API: " + errorMessage), false);
+                return 0;
+            }
+            
+            // First, check for tool usage that might contain MCS commands
+            String mcsCommands = null;
+            
+            // Look for content array
             if (!responseJson.has("content")) {
                 ClaudeMod.LOGGER.error("Invalid API response format: missing content");
-                System.out.println("CLAUDE MOD DEBUG - Invalid API response: missing content");
                 throw new JsonParseException("Invalid API response format: missing content");
             }
             
             // Check if content is an array
             JsonElement contentElement = responseJson.get("content");
             if (!contentElement.isJsonArray()) {
-                ClaudeMod.log("Invalid API response format: content is not an array, it's a " + contentElement.getClass().getSimpleName());
+                ClaudeMod.log("Invalid API response format: content is not an array");
                 throw new JsonParseException("Invalid API response format: content is not an array");
             }
             
-            // Look for tool calls in the response
-            List<JsonObject> toolCalls = new ArrayList<>();
             JsonArray contentArray = contentElement.getAsJsonArray();
-            ClaudeMod.log("Content array from response: " + contentArray);
             
+            // Look for generate_mcs tool calls
             for (JsonElement contentEl : contentArray) {
-                // Check if this element is a JsonObject before casting
-                if (!contentEl.isJsonObject()) {
-                    ClaudeMod.log("Skipping non-object content element: " + contentEl);
-                    continue;
-                }
+                if (!contentEl.isJsonObject()) continue;
                 
                 JsonObject contentObj = contentEl.getAsJsonObject();
-                ClaudeMod.log("Processing content element: " + contentObj);
                 
                 if (contentObj.has("type") && contentObj.get("type").getAsString().equals("tool_use")) {
-                    ClaudeMod.log("Found tool_use content");
-                    
-                    if (contentObj.has("id") && contentObj.has("name") && contentObj.has("input")) {
-                        ClaudeMod.LOGGER.info("Tool call: id=" + contentObj.get("id").getAsString() + 
-                                              ", name=" + contentObj.get("name").getAsString());
-                        
-                        if (contentObj.get("name").getAsString().equals("place_blocks")) {
-                            ClaudeMod.LOGGER.info("Found place_blocks tool call");
-                            toolCalls.add(contentObj);
-                        }
-                    }
-                }
-            }
-            
-            if (toolCalls.isEmpty()) {
-                throw new JsonParseException("No valid place_blocks tool calls found in response");
-            }
-            
-            // Process each tool call to place blocks
-            World world = source.getWorld();
-            int blocksPlaced = 0;
-            
-            for (JsonObject toolCall : toolCalls) {
-                // Get the input which contains block information
-                ClaudeMod.LOGGER.info("Processing tool call: " + toolCall);
-                
-                // Check if input is present and is a JsonObject
-                if (!toolCall.has("input")) {
-                    ClaudeMod.LOGGER.error("Tool call missing input field");
-                    System.out.println("CLAUDE MOD DEBUG - Tool call missing input field: " + toolCall);
-                    continue;
-                }
-                
-                JsonElement inputElement = toolCall.get("input");
-                if (!inputElement.isJsonObject()) {
-                    ClaudeMod.LOGGER.error("Tool input is not a JSON object: " + inputElement);
-                    System.out.println("CLAUDE MOD DEBUG - Tool input is not a JSON object: " + inputElement);
-                    continue;
-                }
-                
-                JsonObject input = inputElement.getAsJsonObject();
-                ClaudeMod.LOGGER.info("Tool input: " + input);
-                System.out.println("CLAUDE MOD DEBUG - Tool input: " + input);
-                
-                if (!input.has("blocks")) {
-                    ClaudeMod.LOGGER.error("No blocks array found in tool input");
-                    System.out.println("CLAUDE MOD DEBUG - No blocks array in tool input: " + input);
-                    continue; // Skip if no blocks array
-                }
-                
-                // Check if blocks is an array
-                JsonElement blocksElement = input.get("blocks");
-                if (!blocksElement.isJsonArray()) {
-                    ClaudeMod.LOGGER.error("Blocks field is not an array: " + blocksElement);
-                    System.out.println("CLAUDE MOD DEBUG - Blocks field is not an array: " + blocksElement);
-                    continue;
-                }
-                
-                JsonArray blocksArray = blocksElement.getAsJsonArray();
-                ClaudeMod.LOGGER.info("Found blocks array with " + blocksArray.size() + " blocks to place");
-                
-                for (JsonElement blockElement : blocksArray) {
-                    // Check if this element is a JsonObject before casting
-                    if (!blockElement.isJsonObject()) {
-                        ClaudeMod.LOGGER.warn("Skipping non-object block element: " + blockElement);
-                        System.out.println("CLAUDE MOD DEBUG - Skipping non-object block: " + blockElement);
-                        continue;
-                    }
-                    
-                    JsonObject blockInfo = blockElement.getAsJsonObject();
-                    ClaudeMod.LOGGER.info("Processing block: " + blockInfo);
-                    
-                    try {
-                        // Extract block details
-                        String blockName = blockInfo.get("block").getAsString();
-                        int x = blockInfo.get("x").getAsInt();
-                        int y = blockInfo.get("y").getAsInt();
-                        int z = blockInfo.get("z").getAsInt();
-                        
-                        ClaudeMod.LOGGER.info("Attempting to place: " + blockName + " at (" + x + ", " + y + ", " + z + ")");
-                        
-                        // Place the block in the world
-                        Block block = Registries.BLOCK.get(new Identifier(blockName));
-                        if (block == null) {
-                            ClaudeMod.LOGGER.error("Invalid block type: " + blockName);
-                            continue;
-                        }
-                        
-                        BlockPos pos = new BlockPos(x, y, z);
-                        
-                        // Set the block state
-                        boolean success = world.setBlockState(pos, block.getDefaultState());
-                        if (success) {
-                            blocksPlaced++;
-                            ClaudeMod.LOGGER.info("Successfully placed " + blockName + " at (" + x + ", " + y + ", " + z + ")");
-                            
-                            // Log every 50 blocks to avoid spam
-                            if (blocksPlaced % 50 == 0) {
-                                ClaudeMod.LOGGER.info("Placed " + blocksPlaced + " blocks so far");
-                                final int progressCount = blocksPlaced;
-                                source.sendFeedback(() -> Text.literal("Progress: " + progressCount + " blocks placed..."), false);
+                    if (contentObj.has("name") && contentObj.get("name").getAsString().equals("generate_mcs")) {
+                        if (contentObj.has("input") && contentObj.get("input").isJsonObject()) {
+                            JsonObject input = contentObj.get("input").getAsJsonObject();
+                            if (input.has("commands")) {
+                                mcsCommands = input.get("commands").getAsString();
+                                break;
                             }
-                        } else {
-                            ClaudeMod.LOGGER.error("Failed to place " + blockName + " at (" + x + ", " + y + ", " + z + ")");
                         }
-                    } catch (Exception e) {
-                        ClaudeMod.LOGGER.error("Error processing block: " + blockInfo, e);
                     }
                 }
             }
             
-            ClaudeMod.log("Successfully placed " + blocksPlaced + " blocks");
-            
-            // Return the total number of blocks placed
-            return blocksPlaced;
+            // If we didn't find MCS commands via tool usage, extract from the text content
+            if (mcsCommands == null || mcsCommands.isEmpty()) {
+                // Extract message content as a raw string
+                String rawContent = extractTextContent(responseJson);
+                
+                // Create MCS file from raw content
+                String buildName = "build_" + UUID.randomUUID().toString().substring(0, 8);
+                String mcsFilePath = McsProcessor.createMcsFromResponse(rawContent, buildName);
+                
+                // Execute the MCS file
+                source.sendFeedback(() -> Text.literal("Created MCS file: " + mcsFilePath), false);
+                source.sendFeedback(() -> Text.literal("Executing MCS commands..."), false);
+                
+                // Start execution and count commands
+                int commandCount = countCommands(mcsFilePath);
+                McsProcessor.executeMcsFile(mcsFilePath, source);
+                
+                return commandCount;
+            } else {
+                // We have MCS commands from tool usage, save and execute them
+                String buildName = "build_" + UUID.randomUUID().toString().substring(0, 8);
+                String mcsFilePath = McsProcessor.saveMcsFile(buildName, mcsCommands);
+                
+                // Execute the MCS file
+                source.sendFeedback(() -> Text.literal("Created MCS file: " + mcsFilePath), false);
+                source.sendFeedback(() -> Text.literal("Executing MCS commands..."), false);
+                
+                // Start execution and count commands
+                int commandCount = countCommands(mcsFilePath);
+                McsProcessor.executeMcsFile(mcsFilePath, source);
+                
+                return commandCount;
+            }
             
         } catch (JsonParseException e) {
             ClaudeMod.log("Error parsing Claude API response: " + e.getMessage());
             source.sendFeedback(() -> Text.literal("Error: Could not parse Claude's response - " + e.getMessage()), false);
             return 0;
         } catch (Exception e) {
-            ClaudeMod.log("Error placing blocks: " + e.getMessage());
+            ClaudeMod.log("Error processing MCS commands: " + e.getMessage());
             e.printStackTrace();
-            source.sendFeedback(() -> Text.literal("Error placing blocks: " + e.getMessage()), false);
+            source.sendFeedback(() -> Text.literal("Error processing MCS commands: " + e.getMessage()), false);
+            return 0;
+        }
+    }
+    
+    /**
+     * Extract text content from Claude's response
+     * 
+     * @param jsonResponse The JSON response object
+     * @return The extracted text content
+     */
+    private static String extractTextContent(JsonObject jsonResponse) {
+        StringBuilder contentBuilder = new StringBuilder();
+        
+        try {
+            if (jsonResponse.has("content") && jsonResponse.get("content").isJsonArray()) {
+                JsonArray contentArray = jsonResponse.get("content").getAsJsonArray();
+                
+                for (JsonElement element : contentArray) {
+                    if (element.isJsonObject()) {
+                        JsonObject contentObj = element.getAsJsonObject();
+                        
+                        if (contentObj.has("type") && contentObj.get("type").getAsString().equals("text")) {
+                            if (contentObj.has("text")) {
+                                String text = contentObj.get("text").getAsString();
+                                contentBuilder.append(text).append("\n");
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return contentBuilder.toString();
+        } catch (Exception e) {
+            ClaudeMod.log("Error extracting text content: " + e.getMessage());
+            return "";
+        }
+    }
+    
+    /**
+     * Count the number of actual commands in an MCS file
+     * 
+     * @param filePath The path to the MCS file
+     * @return The number of commands (excluding comments and empty lines)
+     */
+    private static int countCommands(String filePath) {
+        try {
+            java.nio.file.Path path = java.nio.file.Paths.get(filePath);
+            List<String> lines = java.nio.file.Files.readAllLines(path);
+            
+            int commandCount = 0;
+            for (String line : lines) {
+                line = line.trim();
+                if (!line.isEmpty() && !line.startsWith("#")) {
+                    commandCount++;
+                }
+            }
+            
+            return commandCount;
+        } catch (IOException e) {
+            ClaudeMod.log("Error counting commands in MCS file: " + e.getMessage());
             return 0;
         }
     }

@@ -20,26 +20,17 @@ public class ClaudeAPI {
     private static final String TOOL_SCHEMA = """
         {
           "tools": [{
-            "name": "place_blocks",
-            "description": "Place blocks in the Minecraft world at specific coordinates",
+            "name": "generate_mcs",
+            "description": "Generate Minecraft Command Syntax (MCS) for building structures",
             "input_schema": {
               "type": "object",
               "properties": {
-                "blocks": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "block": {"type": "string", "description": "The Minecraft block type, e.g. minecraft:quartz_block"},
-                      "x": {"type": "integer", "description": "X coordinate"},
-                      "y": {"type": "integer", "description": "Y coordinate"},
-                      "z": {"type": "integer", "description": "Z coordinate"}
-                    },
-                    "required": ["block", "x", "y", "z"]
-                  }
+                "commands": {
+                  "type": "string",
+                  "description": "A string containing multiple Minecraft commands (one per line) to build the structure. Can include /fill, /setblock, /clone, etc."
                 }
               },
-              "required": ["blocks"]
+              "required": ["commands"]
             }
           }]
         }
@@ -56,151 +47,76 @@ public class ClaudeAPI {
             JsonObject requestBody = new JsonObject();
             requestBody.addProperty("model", ClaudeConfig.getModel());
             requestBody.addProperty("max_tokens", 8192);
-            requestBody.addProperty("system", "You are an expert Minecraft architect and builder who creates beautiful, functional structures. " +
-                    "When designing buildings, you follow architectural principles including proportion, balance, structural integrity, " +
-                    "and aesthetic harmony. You understand Minecraft's unique building constraints and opportunities. " +
-                    "Your designs use depth, texture variation, and appropriate block palettes to create visually impressive buildings.");
+            requestBody.addProperty("system", "You are an expert Minecraft architect and builder who specializes in creating efficient command sequences for building structures. " +
+                    "You understand Minecraft's commands like /fill, /setblock, /clone, and /execute, and know how to use them efficiently to create complex builds. " +
+                    "You follow architectural principles like proportion, balance, and aesthetic design. " +
+                    "When asked to build something, you create a sequence of Minecraft commands that, when executed in order, will create the requested structure. " +
+                    "Your output should be a complete set of Minecraft commands in a code block, ready for execution in-game.");
             
             // Create messages array properly
             JsonObject userMessage = new JsonObject();
             userMessage.addProperty("role", "user");
             userMessage.addProperty("content", 
-                "# MINECRAFT BUILDING EXPERT GUIDE\n\n" +
+                "# MINECRAFT COMMAND GENERATOR GUIDE\n\n" +
                 
-                "## DESIGN PROCESS\n" +
-                "Follow this structured approach to create high-quality Minecraft structures:\n\n" +
+                "## COMMAND TYPES\n" +
+                "Use these powerful commands efficiently to build structures:\n\n" +
                 
-                "### PHASE 1: CONCEPTUALIZATION\n" +
-                "1. Analyze the building request carefully (style, purpose, size)\n" +
-                "2. Envision the complete structure in 3D space\n" +
-                "3. Determine appropriate dimensions (use odd numbers like 5, 7, 9 for width/length)\n" +
-                "4. Choose a block palette of 3-5 complementary materials\n" +
-                "5. Sketch floor plan relative to player's position\n\n" +
+                "### FILL COMMAND\n" +
+                "- Format: `/fill x1 y1 z1 x2 y2 z2 block [data] [options]`\n" +
+                "- Use for large areas like walls, floors, roofs\n" +
+                "- Limit to areas of 32,768 blocks or less\n" +
+                "- Example: `/fill ~0 ~0 ~0 ~10 ~0 ~10 minecraft:stone`\n\n" +
                 
-                "### PHASE 2: ARCHITECTURAL PLANNING\n" +
-                "6. Design the foundation (1-2 blocks deep, extending 1 block past walls)\n" +
-                "7. Plan walls with corners, framing, and variation in depth\n" +
-                "8. Design appropriate roof style (gabled, hipped, flat) with overhang\n" +
-                "9. Place windows and doors at proper intervals (odd-numbered spacing)\n" +
-                "10. Add structural elements (columns, beams) where needed\n\n" +
+                "### SETBLOCK COMMAND\n" +
+                "- Format: `/setblock x y z block [data] [options]`\n" +
+                "- Use for single blocks or precise placement\n" +
+                "- Great for blocks with specific states/properties\n" +
+                "- Example: `/setblock ~5 ~1 ~5 minecraft:oak_door[half=lower,facing=east]`\n\n" +
                 
-                "### PHASE 3: EXECUTION WITH BLOCK API\n" +
-                "11. Use the 'place_blocks' tool with proper block IDs\n" +
-                "12. Build in logical order: foundation → frame → walls → roof → details\n" +
-                "13. Test structural integrity throughout (no floating elements)\n" +
-                "14. Apply architectural principles for aesthetics\n" +
-                "15. Add final detailing and landscaping touches\n\n" +
+                "### CLONE COMMAND\n" +
+                "- Format: `/clone x1 y1 z1 x2 y2 z2 x y z [options]`\n" +
+                "- Use for repeating patterns or symmetry\n" +
+                "- Can mirror structures using carefully chosen coordinates\n" +
+                "- Example: `/clone ~0 ~0 ~0 ~5 ~5 ~5 ~10 ~0 ~0`\n\n" +
                 
-                "## AVAILABLE BLOCK RESOURCES\n" +
-                "Use these common Minecraft blocks (always prefix with 'minecraft:'):\n\n" +
+                "### EXECUTE COMMAND\n" +
+                "- Format: `/execute ... run command`\n" +
+                "- Use for complex conditional building\n" +
+                "- Can replace only specific blocks\n" +
+                "- Example: `/execute if block ~0 ~-1 ~0 minecraft:stone run setblock ~0 ~0 ~0 minecraft:grass_block`\n\n" +
                 
-                "### STONE MATERIALS\n" +
-                "- stone, cobblestone, stone_bricks, mossy_stone_bricks\n" +
-                "- andesite, diorite, granite (+ polished variants)\n" +
-                "- deepslate, tuff, calcite, smooth_basalt\n" +
-                "- blackstone, gilded_blackstone\n\n" +
+                "## EFFICIENCY TIPS\n" +
                 
-                "### WOOD MATERIALS\n" +
-                "- oak, spruce, birch, jungle, acacia, dark_oak, crimson, warped\n" +
-                "- Available as: _planks, _log, _slab, _stairs, _fence\n" +
-                "- Use stripped_[wood]_log for cleaner wood textures\n\n" +
-                
-                "### DECORATIVE BLOCKS\n" +
-                "- Slabs and stairs (for depth and detail)\n" +
-                "- Walls (for textured fences and columns)\n" +
-                "- Glass, glass_pane (for windows)\n" +
-                "- Doors: oak_door, spruce_door, etc.\n" +
-                "- Lanterns, torches, glowstone (for lighting)\n" +
-                "- flower_pot, bookshelf, barrel (for details)\n\n" +
-                
-                "### SPECIALTY MATERIALS\n" +
-                "- Concrete (16 colors): white_concrete, gray_concrete, etc.\n" +
-                "- Terracotta (16 colors): red_terracotta, blue_terracotta, etc.\n" +
-                "- Wool (16 colors): yellow_wool, black_wool, etc.\n" +
-                "- Copper: copper_block, exposed_copper, weathered_copper, oxidized_copper\n" +
-                "- Quartz: quartz_block, quartz_pillar, smooth_quartz\n" +
-                "- Rare materials: prismarine, purpur_block, nether_bricks\n\n" +
-                
-                "## PROPER API USAGE\n" +
-                "When using the 'place_blocks' tool to send block placements to Minecraft:\n\n" +
-                
-                "### BLOCK FORMAT REQUIREMENTS\n" +
-                "1. Each block must be properly formatted as:\n" +
-                "   ```\n" +
-                "   {\n" +
-                "     \"block\": \"minecraft:block_name\",\n" +
-                "     \"x\": X_COORDINATE_INTEGER,\n" +
-                "     \"y\": Y_COORDINATE_INTEGER,\n" +
-                "     \"z\": Z_COORDINATE_INTEGER\n" +
-                "   }\n" +
-                "   ```\n" +
-                
-                "2. ALWAYS include the 'minecraft:' namespace prefix\n" +
-                "3. Use EXACT block IDs (e.g., \"minecraft:oak_planks\" not \"minecraft:oak\")\n" +
-                "4. Coordinates must be integers relative to world position\n" +
-                "5. Y-coordinate increases upward (build foundation at player level or below)\n" +
-                "6. Generate coordinates in a systematic way (loop through x, y, z ranges)\n\n" +
+                "### OPTIMIZE COMMAND COUNT\n" +
+                "- Use `/fill` for large areas rather than many `/setblock` commands\n" +
+                "- Build in logical order: foundation → walls → roof → details\n" +
+                "- Use relative coordinates (~ ~ ~) based on player position\n" +
+                "- When appropriate, use `/clone` to copy repeated elements\n\n" +
                 
                 "### TECHNICAL LIMITATIONS\n" +
-                "1. Maximum of 5000 blocks per structure\n" +
-                "2. Build within 50 blocks of player position when possible\n" +
-                "3. Ensure all blocks are connected (no floating parts)\n" +
-                "4. Some blocks require support underneath (respect gravity)\n" +
-                "5. Consider solid blocks for structure, decorative blocks for details\n\n" +
+                "- Maximum 32,768 blocks per `/fill` command\n" +
+                "- Commands with relative coordinates (~) are based on player position\n" +
+                "- Use comments (lines starting with #) to organize sections\n" +
+                "- Some blocks require certain block states (doors, stairs, etc.)\n\n" +
                 
-                "## ARCHITECTURAL PRINCIPLES\n" +
-                "Apply these fundamental principles to all builds:\n\n" +
+                "## AVAILABLE BLOCKS\n" +
+                "All Minecraft blocks can be used with these formats:\n" +
+                "- Basic blocks: `minecraft:stone`, `minecraft:oak_planks`\n" +
+                "- Blocks with states: `minecraft:oak_stairs[facing=north,half=bottom]`\n\n" +
                 
-                "### DEPTH & TEXTURE\n" +
-                "- Never build flat walls (use depth variation of at least 1 block)\n" +
-                "- Mix complementary blocks in patterns (2-3 types per wall)\n" +
-                "- Use stairs, slabs, and walls to create depth and detail\n" +
-                "- Frame openings with contrasting or heavier materials\n\n" +
-                
-                "### PROPORTION & SCALE\n" +
-                "- Follow the rule of odds (3, 5, 7, 9 block dimensions)\n" +
-                "- Maintain ceiling height of 3-5 blocks for interiors\n" +
-                "- Use the golden ratio (1:1.618) for pleasing rectangular shapes\n" +
-                "- Scale details appropriately to overall structure size\n\n" +
-                
-                "### STRUCTURAL INTEGRITY\n" +
-                "- Add visible supports under large spans (beams every 5-7 blocks)\n" +
-                "- Taper structures as they rise (wider base, narrower top)\n" +
-                "- Use heavier materials for lower portions of buildings\n" +
-                "- Create logical load-bearing elements (columns, foundations)\n\n" +
-                
-                "### DETAILING\n" +
-                "- Add trim along roof edges and corners\n" +
-                "- Create windowsills using slabs or stairs\n" +
-                "- Use fence posts and walls for railings and small details\n" +
-                "- Incorporate small asymmetries for natural appearance\n" +
-                "- Add small 1-block decorative elements for character\n\n" +
-                
-                "## EXAMPLES OF GOOD BLOCK COMBINATIONS\n" +
-                
-                "### MEDIEVAL/RUSTIC STYLE\n" +
-                "- Foundation: stone, cobblestone\n" +
-                "- Walls: oak_planks with spruce_log frame\n" +
-                "- Accent: cobblestone, stone_bricks\n" +
-                "- Roof: dark_oak_stairs\n" +
-                "- Details: lanterns, flower_pots\n\n" +
-                
-                "### MODERN STYLE\n" +
-                "- Foundation: smooth_stone, concrete\n" +
-                "- Walls: white_concrete, gray_concrete, glass\n" +
-                "- Accent: black_concrete, quartz\n" +
-                "- Roof: flat with gray_concrete\n" +
-                "- Details: end_rods, iron_bars\n\n" +
-                
-                "### FANTASY STYLE\n" +
-                "- Foundation: deepslate_bricks\n" +
-                "- Walls: prismarine with warped_log frame\n" +
-                "- Accent: copper_block, gold_block\n" +
-                "- Roof: purple_glazed_terracotta\n" +
-                "- Details: sea_lanterns, amethyst_block\n\n" +
+                "## OUTPUT FORMAT\n" +
+                "Your response should include ONLY a code block containing commands:\n" +
+                "```\n" +
+                "# Foundation\n" +
+                "/fill ~0 ~0 ~0 ~10 ~0 ~10 minecraft:stone\n" +
+                "# Walls\n" +
+                "/fill ~0 ~1 ~0 ~10 ~4 ~0 minecraft:oak_planks\n" +
+                "# Etc...\n" +
+                "```\n\n" +
                 
                 "## YOUR TASK\n" +
-                "Based on this guide, create the following structure: " + prompt);
+                "Create a comprehensive set of Minecraft commands that will build: " + prompt);
             
             com.google.gson.JsonArray messagesArray = new com.google.gson.JsonArray();
             messagesArray.add(userMessage);
