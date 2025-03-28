@@ -1,0 +1,25 @@
+# Minecraft Command Syntax Template
+# This serves as a guide for creating efficient building commands
+
+# You can use the following commands:
+# /fill x1 y1 z1 x2 y2 z2 block - Fill a region with blocks
+# /setblock x y z block - Place a single block
+# /clone x1 y1 z1 x2 y2 z2 x y z - Copy a region to another location
+# /execute - For complex commands
+
+# Example for building a simple house:
+# Foundation
+/fill ~0 ~0 ~0 ~10 ~0 ~10 minecraft:stone
+# Walls
+/fill ~0 ~1 ~0 ~10 ~4 ~0 minecraft:oak_planks
+/fill ~0 ~1 ~10 ~10 ~4 ~10 minecraft:oak_planks
+/fill ~0 ~1 ~0 ~0 ~4 ~10 minecraft:oak_planks
+/fill ~10 ~1 ~0 ~10 ~4 ~10 minecraft:oak_planks
+# Roof
+/fill ~0 ~5 ~0 ~10 ~5 ~10 minecraft:oak_planks
+# Door
+/setblock ~5 ~1 ~0 minecraft:oak_door[half=lower]
+/setblock ~5 ~2 ~0 minecraft:oak_door[half=upper]
+# Windows
+/fill ~2 ~2 ~0 ~3 ~3 ~0 minecraft:glass_pane
+/fill ~7 ~2 ~0 ~8 ~3 ~0 minecraft:glass_pane
